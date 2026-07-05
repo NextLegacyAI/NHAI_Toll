@@ -6,7 +6,7 @@
   "author": "Vivek Gupta <vivek@roadsetu.com> (Deeptraffic Private Limited)",
   "engines": { "node": ">=18" },
   "scripts": {
-    "build": "node bin/build.js",
+    "build": "node bin/build.js Traffic_Modeling_Data_20260704.xlsx -o dist/index.html",
     "test": "node test/test.js",
     "serve": "node bin/serve.js"
   },
