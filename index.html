@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Console · RoadSetu</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{
+    --page-bg: #F5F7FA;
+    --card-bg: #FFFFFF;
+    --border: #E2E8F0;
+    --navy: #123F6D;
+    --navy-dim: rgba(18,63,109,0.08);
+    --text: #1E293B;
+    --text-dim: #64748B;
+    --signal: #2F9E7A;
+    --signal-dim: rgba(47,158,122,0.1);
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--page-bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    overflow-x: hidden;
+  }
+
+  body{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    position: relative;
+  }
+
+  /* faint map-dot texture, nodding to the OSM layer on the main dashboard */
+  body::before{
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(rgba(18,63,109,0.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+    z-index: 0;
+  }
+
+  /* the road: a dashed lane running the height of the viewport, with a
+     traveling pulse of light standing in for live traffic */
+  .lane{
+    position: fixed;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    transform: translateX(-50%);
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--border) 0px,
+      var(--border) 22px,
+      transparent 22px,
+      transparent 46px
+    );
+    opacity: 0.7;
+    z-index: 0;
+  }
+
+  .lane::before{
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -60px;
+    width: 3px;
+    height: 60px;
+    transform: translateX(-50%);
+    background: linear-gradient(to bottom, transparent, var(--navy), transparent);
+    filter: drop-shadow(0 0 6px rgba(18,63,109,0.5));
+    animation: travel 5.5s linear infinite;
+  }
+
+  @keyframes travel{
+    0%   { top: -10%; opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 110%; opacity: 0; }
+  }
+
+  .console{
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 460px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 42px 36px 32px;
+    box-shadow: 0 20px 50px rgba(18,63,109,0.08);
+    opacity: 0;
+    transform: translateY(14px);
+    animation: rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+  }
+
+  @keyframes rise{
+    to{ opacity: 1; transform: translateY(0); }
+  }
+
+  .eyebrow{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  .eyebrow .dot{
+    position: relative;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--signal);
+  }
+
+  .eyebrow .dot::after{
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 1px solid var(--signal);
+    animation: ping 2.2s ease-out infinite;
+  }
+
+  @keyframes ping{
+    0%   { transform: scale(0.6); opacity: 0.9; }
+    100% { transform: scale(2.1); opacity: 0; }
+  }
+
+  .brand{
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 3px;
+    color: var(--navy);
+  }
+
+  .brand span{ color: var(--text); }
+
+  .tagline{
+    font-size: 14px;
+    color: var(--text-dim);
+    margin: 0 0 28px;
+  }
+
+  .divider{
+    height: 1px;
+    background: repeating-linear-gradient(
+      to right,
+      var(--border) 0, var(--border) 8px,
+      transparent 8px, transparent 16px
+    );
+    margin: 0 0 28px;
+  }
+
+  .welcome-label{
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 8px;
+  }
+
+  .welcome{
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text);
+    opacity: 0;
+    animation: rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+  }
+
+  .welcome .email{ color: var(--navy); }
+
+  .status{
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 20px;
+    padding: 6px 13px;
+    border-radius: 999px;
+    background: var(--signal-dim);
+    border: 1px solid rgba(47,158,122,0.22);
+    font-size: 12px;
+    color: var(--signal);
+    font-weight: 600;
+  }
+
+  .status .pulse{
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--signal);
+    animation: blink 1.8s ease-in-out infinite;
+  }
+
+  @keyframes blink{
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.25; }
+  }
+
+  .cta{
+    display: inline-block;
+    margin-top: 28px;
+    background: #FFFFFF;
+    color: var(--navy);
+    font-weight: 700;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .cta:hover{
+    background: var(--navy-dim);
+    border-color: var(--navy);
+  }
+
+  footer{
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  footer .legal{ margin: 0; }
+
+  @media (prefers-reduced-motion: reduce){
+    .lane::before, .eyebrow .dot::after, .status .pulse, .console, .welcome{
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <div class="lane" aria-hidden="true"></div>
+
+  <main class="console">
+    <div class="eyebrow"><span class="dot"></span>Console — access unlocked</div>
+
+    <h1 class="brand">Road<span>Setu</span></h1>
+    <p class="tagline">Analytics for traffic and revenue.</p>
+
+    <div class="divider"></div>
+
+    <p class="welcome-label">Signed in as</p>
+    <p class="welcome">Welcome, <span class="email" id="user-email">user@example.com</span></p>
+
+    <div class="status"><span class="pulse"></span>Test build — auth lock pending</div>
+
+    <br>
+    <a class="cta" href="/">Back to dashboard</a>
+
+    <footer>
+      <p class="legal">© <span id="year"></span> DeepTraffic Private Limited. All rights reserved.</p>
+    </footer>
+  </main>
+
+  <script>
+    // Placeholder until real auth is wired in — replace with session/user data.
+    document.getElementById('user-email').textContent = 'user@example.com';
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+
+</body>
+</html>
