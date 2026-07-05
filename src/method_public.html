@@ -1,0 +1,23 @@
+
+<div id="method-modal"><div id="method-box">
+<button id="method-close">Close</button>
+<h2>How the forecast model works</h2>
+<h4>1 &middot; Data preparation</h4>
+<p>Each record is one plaza-month with transaction counts and revenue by vehicle class. Duplicate plaza-month rows (split source records) were <b>summed</b> &mdash; transactions are additive. Passenger = Car/Jeep/Van; Commercial = LCV + Bus/Truck + 3-Axle + 4-6 Axle + OSV.</p>
+<h4>2 &middot; Model form</h4>
+<p>Every series (network, state, plaza; revenue or traffic; total, passenger or commercial) is fit with the same structural time-series model &mdash; the decomposition Facebook Prophet uses for monthly data:</p>
+<p><code>log(1 + y<sub>t</sub>) = a + b&middot;t + &Sigma;<sub>k</sub> [ &alpha;<sub>k</sub>&middot;sin(2&pi;kt/12) + &beta;<sub>k</sub>&middot;cos(2&pi;kt/12) ]</code></p>
+<p>A straight-line <b>trend</b> plus <b>yearly seasonality</b> as Fourier terms (period 12 months). Fitting in log space keeps forecasts non-negative and makes seasonality <b>multiplicative</b> &mdash; a plaza that doubles in size keeps the same percentage monsoon dip, which matches how toll traffic behaves.</p>
+<h4>3 &middot; Fitting</h4>
+<p>Coefficients are estimated by ordinary least squares (normal equations, Gaussian elimination) &mdash; computed live in your browser; nothing leaves your machine. Fourier order 4 when a series has &ge;24 months of history; order 2 for 12&ndash;23 months; below 12 months no forecast is produced.</p>
+<h4>4 &middot; What the derived numbers mean</h4>
+<p><b>Trend growth p.a.</b> = e<sup>12b</sup> &minus; 1: annualized growth of the fitted trend with seasonality removed &mdash; cleaner than raw YoY, which mixes trend and calendar effects. <b>Seasonal index</b> = expected month &divide; average month after detrending; 1.05 means that month typically runs 5% above trend. <b>R&sup2;</b> is measured in log space; low values flag noisy or structurally-shifting series.</p>
+<h4>5 &middot; Uncertainty bands</h4>
+<p>The shaded band is &plusmn;1.96&sigma; of in-sample residuals (&asymp;95%), widened with forecast distance by &radic;(1 + h/24) where h is months ahead. It captures noise around the fitted curve, <b>not</b> uncertainty about whether the trend itself will hold.</p>
+<h4>6 &middot; Validation</h4>
+<p>On this dataset (Jan 2023 &ndash; May 2026), a holdout backtest &mdash; fitting on all but the last 6 months and forecasting them &mdash; gave a <b>median error (MAPE) of 8.7%</b> across 835 plazas with &ge;36 months of history; 83% landed within 20%. Errors are larger for small-revenue plazas.</p>
+<h4>7 &middot; Data scope</h4>
+<p>This page publishes <b>aggregate and derived metrics only</b>: nationwide and state monthly totals, and per-plaza derived indicators (last-12-month totals, growth trends, forecast totals). Plaza-level monthly time series are not included in this page or its source. For access to detailed data, contact <a href="mailto:vivek@roadsetu.com">vivek@roadsetu.com</a>.</p>
+<h4>8 &middot; Limitations &mdash; read before trusting the 5-year view</h4>
+<p>The model extrapolates the fitted trend. It cannot anticipate toll rate revisions, WPI-linked resets, new parallel expressways diverting traffic, concession handovers, tolling suspensions, or decommissioning. Short horizons (6&ndash;12 months) are forecasts; the 5-year horizon is a <b>trend-continuation scenario</b>. Growth-leader rankings apply eligibility filters (&ge;24 months history, active in last 3 months, &ge;&#8377;1 cr revenue) because tiny or inactive plazas produce meaningless percentages.</p>
+</div></div>

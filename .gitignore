@@ -1,0 +1,10 @@
+node_modules/
+# data files are never committed — the site embeds only aggregates
+*.xlsx
+*.xls
+*.h5
+*.hdf5
+*.pkl
+*.parquet
+consolidated*.csv
+.DS_Store

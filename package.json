@@ -1,0 +1,15 @@
+{
+  "name": "toll-trends",
+  "version": "1.0.0",
+  "description": "Single-file toll network trends dashboard: Node build pipeline + zero-dependency frontend. Publishes aggregates and derived metrics only.",
+  "license": "UNLICENSED",
+  "author": "Vivek Gupta <vivek@roadsetu.com> (Deeptraffic Private Limited)",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "node bin/build.js",
+    "test": "node test/test.js"
+  },
+  "optionalDependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
