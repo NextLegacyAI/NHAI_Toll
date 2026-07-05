@@ -103,9 +103,31 @@ T("derive: trends have the right sign and forecasts exist", () => {
 T("privacy: no plaza-level time series in the payload", () => {
   const e = derive(syntheticRows());
   for (const p of e.plazasD)
-    for (const [k, v] of Object.entries(p))
-      if (Array.isArray(v) && k !== "c")
-        assert(v.length <= 6, "unexpected array on plaza record: " + k);
+    for (const [k, v] of Object.entries(p)) {
+      if (!Array.isArray(v)) continue;
+      if (k === "c") { assert(v.length === 6 && v.every(x => x.length === 4)); continue; }
+      if (k === "m") { assert(v.length === 6 && v.every(x => x == null || x.length === 11)); continue; }
+      assert(v.length <= 6, "unexpected array on plaza record: " + k);
+    }
+});
+
+T("plaza model coefficients reconstruct trend and forecast", () => {
+  const e = derive(syntheticRows());
+  const alpha = e.plazasD.find(p => p.name === "Alpha");
+  assert(alpha.m && alpha.m[0], "coefficients embedded for >=24-month plaza");
+  const mp = alpha.m[0];
+  // trend from coefficients must match the embedded derived trend
+  assert(Math.abs(Math.expm1(mp[1] * 12) - alpha.c[0][2]) < 2e-3, "trend consistency");
+  // reconstructed 12-month forecast sum must match embedded fcst12
+  const evalM = (t, h) => {
+    let lf = mp[0] + mp[1] * t;
+    for (let k = 1; k <= 4; k++)
+      lf += mp[2 + 2 * (k - 1)] * Math.sin(2 * Math.PI * k * t / 12) + mp[3 + 2 * (k - 1)] * Math.cos(2 * Math.PI * k * t / 12);
+    return Math.max(Math.expm1(lf), 0);
+  };
+  let s = 0;
+  for (let i = 1; i <= 12; i++) s += evalM(alpha.k1 + i - alpha.k0, i);
+  assert(Math.abs(s - alpha.c[0][3]) / alpha.c[0][3] < 0.01, "fcst12 reconstruction: " + s + " vs " + alpha.c[0][3]);
 });
 
 T("coordinates: invalid/missing excluded", () => {

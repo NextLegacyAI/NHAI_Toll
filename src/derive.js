@@ -62,7 +62,8 @@ function derive(rows, title) {
       for (let j = 0; j < 6; j++) { netcls[i][j] += rec.amt[j]; netcls[i][6 + j] += rec.cnt[j]; }
       if (k > lastK - 12) { totAmt12 += rec.totAmt; totCnt12 += rec.totCnt; }
     }
-    // derived combos
+    // derived combos + model coefficients (coefficients only — never actual series)
+    const mparams = [];
     const c = COMBOS.map(([metric, cat]) => {
       let sel12 = 0, prev = 0, n12 = 0, nPrev = 0;
       for (const k of ks) {
@@ -71,7 +72,7 @@ function derive(rows, title) {
         else if (k > lastK - 24) { prev += v; nPrev++; }
       }
       const yoy = (n12 === 12 && nPrev === 12 && prev > 0) ? +(sel12 / prev - 1).toFixed(4) : null;
-      let trend = null, fc12 = null;
+      let trend = null, fc12 = null, mp = null;
       if (ks.length >= 24) {
         const f = fitSeries(ks.map(k => k - ks[0]), ks.map(k => comboValue(p.months.get(k), metric, cat)), 4);
         if (isFinite(f.trendPA)) {
@@ -79,15 +80,20 @@ function derive(rows, title) {
           let s = 0;
           for (let i = 1; i <= 12; i++) s += f.predict(ks[ks.length - 1] + i - ks[0], i).mid;
           fc12 = Math.round(s);
+          mp = [+f.beta[0].toFixed(4), +f.beta[1].toFixed(6)]
+            .concat(f.beta.slice(2).map(b => +b.toFixed(5)))
+            .concat([+f.sigma.toFixed(4)]);
         }
       }
+      mparams.push(mp);
       return [Math.round(sel12), yoy, trend, fc12];
     });
     plazasD.push({
       name, s: p.state, la: p.lat, lo: p.lon, n: ks.length,
       act: ks[ks.length - 1] > lastK - 3 ? 1 : 0,
       avg: totCnt12 > 0 ? +(totAmt12 / totCnt12).toFixed(1) : null,
-      c,
+      k0: ks[0], k1: ks[ks.length - 1],
+      c, m: mparams.some(x => x) ? mparams : null,
     });
   }
 

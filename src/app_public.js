@@ -56,6 +56,15 @@ function fitSeries(ts,ys,order){
   return { predict, sIdx, trendPA:Math.expm1(beta[1]*12), r2 };
 }
 const keyToLabel=k=>MONTHS[k%12]+"-"+Math.floor(k/12);
+/* Evaluate embedded model coefficients mp=[a,b,f1..f8,sigma] at relative month t, h steps ahead */
+function evalModel(mp,t,h){
+  h=h||0;
+  let lf=mp[0]+mp[1]*t;
+  for(let k=1;k<=4;k++)
+    lf+=mp[2+2*(k-1)]*Math.sin(2*Math.PI*k*t/12)+mp[3+2*(k-1)]*Math.cos(2*Math.PI*k*t/12);
+  const w=1.96*mp[10]*Math.sqrt(1+h/24);
+  return { mid:Math.max(Math.expm1(lf),0), lo:Math.max(Math.expm1(lf-w),0), hi:Math.max(Math.expm1(lf+w),0) };
+}
 /* month tuple: [amt,cnt,pasA,pasC,comA,comC] */
 function tupVal(t,metric,cat){
   if(cat==="total") return metric==="amt"?t[0]:t[1];
@@ -294,11 +303,13 @@ function computeA(){
   const fcstH=futKeys.reduce((s,k,i)=>s+fitSel.predict(k-t00,i+1).mid,0);
   const lastHActual=selNet.slice(-Math.min(S.horizon,nAct)).reduce((a,b)=>a+b,0);
   const ci=COMBO_IDX[S.metric+"_"+S.category];
+  const ciA=COMBO_IDX["amt_"+S.category], ciC=COMBO_IDX["cnt_"+S.category];
   const plazaStats=E.plazasD.map(p=>({
-    name:p.name, state:p.s, lat:p.la, lon:p.lo, n:p.n, act:p.act, avgToll:p.avg,
+    name:p.name, state:p.s, lat:p.la, lon:p.lo, n:p.n, act:p.act,
+    avgToll:(p.c[ciC][0]>0)?p.c[ciA][0]/p.c[ciC][0]:null,
     sel12:p.c[ci][0], yoy:p.c[ci][1], trend:p.c[ci][2], fcst12:p.c[ci][3],
     pas12:p.c[COMBO_IDX[S.metric+"_pas"]][0], com12:p.c[COMBO_IDX[S.metric+"_com"]][0],
-    tot12amt:p.c[0][0]
+    tot12amt:p.c[0][0], mp:(p.m&&p.m[ci])?p.m[ci]:null, k0:p.k0, k1:p.k1
   })).sort((a,b)=>b.sel12-a.sel12);
   const eligible=plazaStats.filter(p=>p.trend!=null&&p.act&&p.tot12amt>=1e7);
   const topGrowth=[...eligible].sort((a,b)=>b.trend-a.trend).slice(0,10);
@@ -490,10 +501,11 @@ function renderStates(body,vf,hLabel,chartTitle){
     pb2.appendChild(cdiv);
     lineChart(cdiv,{labels,series,height:340,vFmt:vf});
   }
-  let t="<table><tr><th>State</th><th>Plazas</th><th>"+esc(chartTitle)+" last 12M</th><th>YoY</th><th class='r'>Avg toll / txn (12M)</th></tr>";
+  let t="<table><tr><th>State</th><th>Plazas</th><th>"+esc(chartTitle)+" last 12M</th><th>YoY</th><th class='r'>Avg toll / txn \u00B7 "+esc(CAT_SHORT[S.category])+" (12M)</th></tr>";
   A.states.slice(0,12).forEach(s=>{
     let a=0,c=0;
-    for(let i=Math.max(0,A.nAct-12);i<A.nAct;i++){ a+=s.ser[i][0]; c+=s.ser[i][1]; }
+    for(let i=Math.max(0,A.nAct-12);i<A.nAct;i++){
+      a+=tupVal(s.ser[i],"amt",S.category); c+=tupVal(s.ser[i],"cnt",S.category); }
     const rate=c>0?a/c:null;
     t+="<tr><td><b>"+esc(s.state)+"</b></td><td>"+s.plazas+"</td><td>"+vf(s.a12)+"</td>"+
       "<td style='color:"+(s.yoy>0?C.green:C.red)+"'>"+fmtPct(s.yoy)+"</td>"+
@@ -529,8 +541,44 @@ function renderPlazas(body,vf,hLabel,chartTitle){
       kpi("YoY",fmtPct(p.yoy),"",C.blue)+
       kpi("Trend p.a.",fmtPct(p.trend),p.trend!=null?(p.n+" months history"):(p.n+" months (needs \u226524)"),C.blue)+
       kpi("Forecast \u00B7 next 12M",p.fcst12!=null?vf(p.fcst12):"\u2013","fixed 12-month horizon",C.lblue)+
-      kpi("Avg toll / txn",p.avgToll!=null?"\u20B9"+Math.round(p.avgToll).toLocaleString("en-IN"):"\u2013")+
-      "</div><p class='note'>Plaza-level monthly time series are not published on this page. For detailed data, see the contact details in the footer.</p>";
+      kpi("Avg toll / txn \u00B7 "+CAT_SHORT[S.category],p.avgToll!=null?"\u20B9"+Math.round(p.avgToll).toLocaleString("en-IN"):"\u2013","last 12M, selected category")+
+      "</div><div id='pchartwrap'></div>";
+    const wrap=det.querySelector("#pchartwrap");
+    if(p.mp){
+      const histKeys=[]; for(let k=p.k0;k<=p.k1;k++) histKeys.push(k);
+      const futKeys=Array.from({length:S.horizon},(_,i)=>p.k1+1+i);
+      const labels=histKeys.map(keyToLabel).concat(futKeys.map(keyToLabel));
+      const nH=histKeys.length;
+      const modeled=histKeys.map(k=>evalModel(p.mp,k-p.k0,0).mid).concat(futKeys.map(()=>null));
+      const fc=labels.map(()=>null), band=labels.map(()=>null);
+      fc[nH-1]=modeled[nH-1];
+      futKeys.forEach((k,i)=>{ const f=evalModel(p.mp,k-p.k0,i+1); fc[nH+i]=f.mid; band[nH+i]=[f.lo,f.hi]; });
+      const cdiv=document.createElement("div");
+      const getCsv=()=>{
+        const rows=[["Month","Modeled "+chartTitle+" (estimate)","Forecast","Forecast lo (95%)","Forecast hi (95%)"]];
+        labels.forEach((lb,i)=>rows.push([lb,
+          modeled[i]!=null?Math.round(modeled[i]):null,
+          (i>=nH&&fc[i]!=null)?Math.round(fc[i]):null,
+          band[i]?Math.round(band[i][0]):null, band[i]?Math.round(band[i][1]):null]));
+        return rows;
+      };
+      const head=document.createElement("div"); head.className="phead";
+      head.innerHTML="<h3 style='margin:0;font-size:15px;color:#123F6D'>Modeled trajectory and "+hLabel+" projection</h3>";
+      head.appendChild(dlButtons(getCsv,cdiv,("plaza_"+S.selPlaza).replace(/[^A-Za-z0-9_-]+/g,"_")));
+      wrap.appendChild(head); wrap.appendChild(cdiv);
+      lineChart(cdiv,{labels,height:320,vFmt:vf,
+        series:[{name:"Modeled history (estimate)",color:C.lblue,values:modeled},
+                {name:"Projection",color:C.navy,dash:true,values:fc}],
+        band});
+      const note=document.createElement("p"); note.className="note";
+      note.textContent="The curve is the fitted model estimate reconstructed from published model coefficients \u2014 actual monthly plaza data is not contained in this page. Use the Horizon control above for 6-month, 1-year or 5-year projections. Forecasts are model estimates, not investment advice.";
+      wrap.appendChild(note);
+    } else {
+      wrap.innerHTML="<p class='note'>No model available for this plaza (needs \u226524 months of history).</p>";
+    }
+    const priv=document.createElement("p"); priv.className="note";
+    priv.textContent="For detailed plaza-level datasets, see the contact details in the footer.";
+    det.appendChild(priv);
   }
   drawSugg(); drawDetail();
 }
@@ -588,20 +636,29 @@ function renderMap(body,vf,hLabel,chartTitle){
 
 /* -------- toll per transaction by class (descriptive feature, no trend/forecast) -------- */
 function renderTollRates(body){
+  const clsIdx=S.category==="pas"?[0]:S.category==="com"?[1,2,3,4,5]:[0,1,2,3,4,5];
+  const avgSeries=A.rates.map((r,i)=>{
+    const row=EMBEDDED.netcls[i];
+    let a=0,c=0; clsIdx.forEach(j=>{ a+=row[j]; c+=row[6+j]; });
+    return c>0?a/c:null;
+  });
   const cdiv=document.createElement("div");
   const getCsv=()=>{
-    const rows=[["Month"].concat(CLASS_NAMES.map(n=>n+" avg toll (Rs/txn)"))];
-    A.rates.forEach(r=>rows.push([r.label].concat(r.r.map(v=>v!=null?Math.round(v*10)/10:null))));
+    const rows=[["Month"].concat(clsIdx.map(j=>CLASS_NAMES[j]+" avg toll (Rs/txn)")).concat([CAT_SHORT[S.category]+" average (Rs/txn)"])];
+    A.rates.forEach((r,i)=>rows.push([r.label]
+      .concat(clsIdx.map(j=>r.r[j]!=null?Math.round(r.r[j]*10)/10:null))
+      .concat([avgSeries[i]!=null?Math.round(avgSeries[i]*10)/10:null])));
     return rows;
   };
-  const pb=panel(body,"Average toll per transaction by vehicle class \u2014 nationwide monthly (actuals only)",
+  const pb=panel(body,"Average toll per transaction \u2014 "+esc(CAT_LABEL[S.category])+", nationwide monthly (actuals only)",
     dlButtons(getCsv,cdiv,"toll_per_transaction"));
   pb.appendChild(cdiv);
+  const series=clsIdx.map(j=>({name:CLASS_NAMES[j],color:CLASS_COLORS[j],values:A.rates.map(r=>r.r[j])}));
+  if(clsIdx.length>1) series.push({name:CAT_SHORT[S.category]+" average",color:"#1E293B",dash:true,values:avgSeries});
   lineChart(cdiv,{labels:A.rates.map(r=>r.label),height:340,
-    yFmt:v=>"\u20B9"+Math.round(v),vFmt:v=>"\u20B9"+v.toFixed(0),
-    series:CLASS_NAMES.map((nm,j)=>({name:nm,color:CLASS_COLORS[j],values:A.rates.map(r=>r.r[j])}))});
+    yFmt:v=>"\u20B9"+Math.round(v),vFmt:v=>"\u20B9"+v.toFixed(0),series});
   const note=document.createElement("p"); note.className="note";
-  note.textContent="Effective average rate (class revenue \u00F7 class transactions), nationwide, historical actuals only \u2014 no trend fit or forecast is applied here. Step changes usually mark toll rate revisions (typically April, WPI-linked).";
+  note.textContent="Effective average rate (class revenue \u00F7 class transactions) for the selected vehicle category \u2014 use the Category control above to switch between Total, Passenger and Commercial. Historical actuals only; no trend fit or forecast is applied here. Step changes usually mark toll rate revisions (typically April, WPI-linked).";
   pb.appendChild(note);
 }
 

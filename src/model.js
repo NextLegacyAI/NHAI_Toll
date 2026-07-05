@@ -47,7 +47,7 @@ function fitSeries(ts, ys, order) {
     const w = 1.96 * sigma * Math.sqrt(1 + h / 24);
     return { mid: Math.max(Math.expm1(lf), 0), lo: Math.max(Math.expm1(lf - w), 0), hi: Math.max(Math.expm1(lf + w), 0) };
   };
-  return { beta, trendPA: Math.expm1(beta[1] * 12), r2, predict };
+  return { beta, sigma, trendPA: Math.expm1(beta[1] * 12), r2, predict };
 }
 
 module.exports = { lstsq, design, fitSeries };
